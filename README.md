@@ -54,7 +54,8 @@ and hides them from viewport and render.
 ## Requirements
 
 * Blender 5.1+ (earlier versions have not been tested)
-* Sollumz
+* Sollumz 2.8.3+ (earlier versions have not been tested)
+* GTA5 Props Assets Library (.blend or other formats imported using Sollumz)
 
 ## Installation
 
@@ -73,21 +74,21 @@ Open addon preferences.
 
 Set:
 
-  Asset Library Path
+-Asset Library Path
 
 Then click:
 
-  Check and Build Asset Index
+-Check and Build Asset Index
 
 ### Custom Props
 
 Set:
 
-  Custom Props Path
+-Custom Props Path
 
 Then click:
 
-  Check and Build Custom Props Index
+-Check and Build Custom Props Index
 
 ## Usage
 
@@ -97,11 +98,11 @@ Then click:
 2. Import YTYP using Sollumz.
 3. Open:
 
-  View3D → Sidebar → GTA Scene Rebuilder
+-View3D → Sidebar → GTA Scene Rebuilder
 
 4. Click:
 
-  Analyze Scene
+-Analyze Scene
 
 The addon will:
 
@@ -115,7 +116,7 @@ The addon will:
 
 Click:
 
-  Hide Non-YTYP Props
+-Hide Non-YTYP Props
 
 Objects not referenced by YTYP entities will be moved to Hidden props.
 
