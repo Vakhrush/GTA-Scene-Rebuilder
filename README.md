@@ -40,16 +40,25 @@ Automatically creates:
 * props_gta
 * custom_props
 * Hidden props
+* Missing props
 
 collections.
 
 ### Hide Non-YTYP Props
 
-Moves scene objects not referenced by any YTYP entity into:
+Moves unused Sollumz props into the "Hidden props" collection and hides the collection from viewport and render.
 
-  Hidden props
+### Diagnostics
 
-and hides them from viewport and render.
+* Show Non-Linked Props button
+* Missing entity reporting
+* Console diagnostics and execution profiling
+
+### Find Missing Props Here...
+
+* Recursive folder search for other props
+* Automatic entity relinking
+* Hierarchy duplication support
 
 ## Requirements
 
@@ -74,21 +83,21 @@ Open addon preferences.
 
 Set:
 
--Asset Library Path
+- Asset Library Path
 
 Then click:
 
--Check and Build Asset Index
+- Check and Build Asset Index
 
 ### Custom Props
 
 Set:
 
--Custom Props Path
+- Custom Props Path
 
 Then click:
 
--Check and Build Custom Props Index
+- Check and Build Custom Props Index
 
 ## Usage
 
@@ -102,7 +111,7 @@ Then click:
 
 4. Click:
 
--Analyze Scene
+- Analyze Scene
 
 The addon will:
 
@@ -116,9 +125,29 @@ The addon will:
 
 Click:
 
--Hide Non-YTYP Props
+- Hide Non-YTYP Props
 
-Objects not referenced by YTYP entities will be moved to Hidden props.
+Objects not referenced by YTYP entities will be moved to "Hidden props" collection.
+
+### Find Missing Props Here...
+
+Use this tool when some entities remain unlinked after running Analyze Scene.
+
+Click:
+
+1. Find Missing Props Here...
+2. Select a folder containing custom props.
+
+The addon will:
+
+* recursively scan the selected folder
+* find matching props by archetype name
+* import props through Sollumz
+* restore entity links
+* apply entity transforms
+* create hierarchy duplicates when required
+
+Imported objects will be placed into the "Missing props" collection.
 
 ## Performance
 
@@ -128,3 +157,7 @@ Current version uses:
 * Custom props indexing
 * Batch blend importing
 
+## Current Limitations
+
+* Matching custom props relies on file naming.
+* Asset indexes should be rebuilt after adding new assets.
