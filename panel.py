@@ -20,6 +20,16 @@ class GTA_SCENE_REBUILDER_PT_viewport_panel(bpy.types.Panel):
             text="Hide non-YTYP props",
             icon="HIDE_ON",
         )
+        layout.operator(
+            "gta_scene_rebuilder.show_non_linked_props",
+            text="Show Non-Linked Props",
+            icon="INFO",
+        )
+        layout.operator(
+            "gta_scene_rebuilder.find_missing_props",
+            text="Find Missing Props Here...",
+            icon="FILE_FOLDER",
+        )
 
 
 classes = (

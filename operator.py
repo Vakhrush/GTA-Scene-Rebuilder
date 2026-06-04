@@ -8,6 +8,7 @@ import bpy
 PROPS_GTA_COLLECTION_NAME = "props_gta"
 CUSTOM_PROPS_COLLECTION_NAME = "custom_props"
 HIDDEN_PROPS_COLLECTION_NAME = "Hidden props"
+MISSING_PROPS_COLLECTION_NAME = "Missing props"
 
 
 def get_blender_base_name(object_name):
@@ -77,6 +78,10 @@ def ensure_scene_collection(context, collection_name):
     return collection
 
 
+def ensure_missing_props_collection(context):
+    return ensure_scene_collection(context, MISSING_PROPS_COLLECTION_NAME)
+
+
 def ensure_custom_props_collection(context):
     return ensure_scene_collection(context, CUSTOM_PROPS_COLLECTION_NAME)
 
@@ -144,6 +149,34 @@ def object_is_in_collection(obj, collection_name):
 
 def hierarchy_uses_collection(hierarchy_objects, collection_name):
     return any(object_is_in_collection(obj, collection_name) for obj in hierarchy_objects)
+
+
+def object_is_sollumz(obj):
+    """Heuristic to detect Sollumz-created objects.
+
+    Rules:
+    - Always ignore cameras, lights, speakers, light probes.
+    - For empties: treat as Sollumz only if they have any custom property that mentions 'sollum' (case-insensitive).
+    - For other object types (mesh/curve/etc.) assume they are props (Sollumz) and process them.
+    """
+    if obj.type in ("CAMERA", "LIGHT", "SPEAKER", "LIGHT_PROBE"):
+        return False
+
+    if obj.type == "EMPTY":
+        # Consider empty a Sollumz object only if it exposes a sollumz-specific custom property
+        for key in obj.keys():
+            if isinstance(key, str) and "sollum" in key.lower():
+                return True
+
+        return False
+
+    # For mesh/curve/font/etc. assume it's a prop
+    return True
+
+
+def hierarchy_is_sollumz(hierarchy_objects):
+    # If any object in hierarchy is considered Sollumz, treat the whole hierarchy as Sollumz
+    return any(object_is_sollumz(obj) for obj in hierarchy_objects)
 
 
 def load_asset_index(index_file_path, asset_library_path):
@@ -590,15 +623,23 @@ class GTA_SCENE_REBUILDER_OT_rebuild_scene(bpy.types.Operator):
 
         for archetype_name in Unlinked:
             processed_count += 1
-            matched_objects = root_objects_by_base_name.get(archetype_name)
-            target_object = matched_objects[0] if matched_objects else None
-            target_source = "scene" if target_object else None
 
-            if target_object:
+            # Try to reuse existing root objects in the scene first. Pop from the list so multiple
+            # existing instances (e.g., chair, chair.001, chair.002) are consumed before creating
+            # any duplicates.
+            matched_objects = root_objects_by_base_name.get(archetype_name)
+            target_object = None
+            target_source = None
+
+            if matched_objects:
+                # Reuse the first available existing root and remove it from available pool
+                target_object = matched_objects.pop(0)
+                target_source = "scene"
                 collection_management_start_time = time.perf_counter()
                 link_object_to_props_collection(target_object, props_collection)
                 collection_management_time += time.perf_counter() - collection_management_start_time
 
+            # If no existing object was available, try imports (GTA index or Custom Props)
             if target_object is None:
                 if archetype_name in missing_index_archetypes:
                     asset_lookup_start_time = time.perf_counter()
@@ -649,10 +690,13 @@ class GTA_SCENE_REBUILDER_OT_rebuild_scene(bpy.types.Operator):
                                 imported_count += 1
                                 root_objects_by_base_name.setdefault(archetype_name, []).append(target_object)
 
-            if target_object is None:
+            if target_object is None and archetype_name not in root_objects_by_base_name:
                 not_found_count += 1
                 continue
 
+            # Use the up-to-date pool of available roots for this archetype. This list may have been
+            # modified above (popped or appended to) so fetch it again.
+            available_roots = root_objects_by_base_name.get(archetype_name, [])
             entity_items = entities_by_archetype_name[archetype_name]
 
             print("")
@@ -663,27 +707,37 @@ class GTA_SCENE_REBUILDER_OT_rebuild_scene(bpy.types.Operator):
             print(len(entity_items))
 
             for entity_offset, (entity_index, entity) in enumerate(entity_items):
-                if entity_offset == 0:
-                    entity_object = target_object
-                elif target_source == "custom":
-                    instance_creation_start_time = time.perf_counter()
-                    entity_object = duplicate_hierarchy(target_object, custom_props_collection)
-                    instance_creation_time += time.perf_counter() - instance_creation_start_time
-                else:
-                    instance_creation_start_time = time.perf_counter()
-                    entity_object = target_object.copy()
-                    instance_creation_time += time.perf_counter() - instance_creation_start_time
+                entity_object = None
+
+                # First reuse any available existing root objects
+                if available_roots:
+                    entity_object = available_roots.pop(0)
+                    # Ensure it's linked to the correct collection
                     collection_management_start_time = time.perf_counter()
-                    link_object_to_props_collection(entity_object, props_collection)
+                    if target_source == "custom":
+                        link_object_to_props_collection(entity_object, custom_props_collection)
+                    else:
+                        link_object_to_props_collection(entity_object, props_collection)
                     collection_management_time += time.perf_counter() - collection_management_start_time
+
+                else:
+                    # No existing root available; create a new instance. Preserve existing behavior:
+                    # - For custom props, duplicate the full hierarchy (already correct behavior)
+                    # - For GTA/scene objects, duplicate the full hierarchy as well (fixes bug)
+                    if target_source == "custom":
+                        instance_creation_start_time = time.perf_counter()
+                        entity_object = duplicate_hierarchy(target_object, custom_props_collection)
+                        instance_creation_time += time.perf_counter() - instance_creation_start_time
+                    else:
+                        instance_creation_start_time = time.perf_counter()
+                        # Duplicate full hierarchy for scene/GTA objects instead of copying root only
+                        entity_object = duplicate_hierarchy(target_object, props_collection)
+                        instance_creation_time += time.perf_counter() - instance_creation_start_time
 
                 entity_linking_start_time = time.perf_counter()
                 entity.linked_object = entity_object
                 entity_linking_time += time.perf_counter() - entity_linking_start_time
-                if target_source != "custom":
-                    collection_management_start_time = time.perf_counter()
-                    link_object_to_props_collection(entity_object, props_collection)
-                    collection_management_time += time.perf_counter() - collection_management_start_time
+
                 transform_application_start_time = time.perf_counter()
                 entity_object.location = entity.position
                 entity_object.rotation_euler = entity.rotation.to_euler()
@@ -718,6 +772,158 @@ class GTA_SCENE_REBUILDER_OT_rebuild_scene(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class GTA_SCENE_REBUILDER_OT_find_missing_props(bpy.types.Operator):
+    bl_idname = "gta_scene_rebuilder.find_missing_props"
+    bl_label = "Find Missing Props Here..."
+    bl_description = "Scan a folder and import props matching non-linked YTYP entities"
+    bl_options = {"REGISTER", "UNDO"}
+
+    directory: bpy.props.StringProperty(subtype='DIR_PATH')
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {"RUNNING_MODAL"}
+
+    def execute(self, context):
+        scene = context.scene
+        # Collect non-linked entities grouped by archetype_name
+        entities_by_archetype = {}
+
+        for ytyp in scene.ytyps:
+            for archetype in ytyp.archetypes:
+                for entity in archetype.entities:
+                    if entity.linked_object is None:
+                        entities_by_archetype.setdefault(entity.archetype_name, []).append(entity)
+
+        archetype_names = list(entities_by_archetype.keys())
+
+        print("=== Find Missing Props ===")
+
+        if not archetype_names:
+            print("Found: 0")
+            print("Imported: 0")
+            print("Linked: 0")
+            print("Not Found: 0")
+            return {"FINISHED"}
+
+        selected_dir = Path(bpy.path.abspath(self.directory))
+
+        # Build a lookup of base filename -> first matching file path
+        file_lookup = {}
+
+        try:
+            for p in selected_dir.rglob("*"):
+                if not p.is_file():
+                    continue
+
+                base = p.name.split(".")[0].lower()
+
+                if base not in file_lookup:
+                    file_lookup[base] = p
+        except Exception as e:
+            print(f"Error scanning directory: {selected_dir}")
+            print(e)
+            return {"CANCELLED"}
+
+        missing_collection = ensure_missing_props_collection(context)
+
+        found_count = 0
+        imported_count = 0
+        linked_count = 0
+        not_found = []
+
+        imported_roots = {}
+
+        for archetype_name, entities in entities_by_archetype.items():
+            match_path = file_lookup.get(archetype_name.lower())
+
+            if not match_path:
+                not_found.append(archetype_name)
+                continue
+
+            found_count += 1
+
+            # Import using existing custom props import workflow but into Missing props collection
+            root_object = import_custom_prop(str(match_path), archetype_name, missing_collection, context)
+
+            if not root_object:
+                not_found.append(archetype_name)
+                continue
+
+            imported_count += 1
+            imported_roots[archetype_name] = root_object
+
+            # Link entities: first entity uses imported root; duplicates for subsequent entities
+            for idx, entity in enumerate(entities):
+                if idx == 0:
+                    entity_object = root_object
+                else:
+                    entity_object = duplicate_hierarchy(root_object, missing_collection)
+
+                entity.linked_object = entity_object
+                entity_object.location = entity.position
+                entity_object.rotation_euler = entity.rotation.to_euler()
+                linked_count += 1
+
+        print(f"Found: {found_count}")
+        print(f"Imported: {imported_count}")
+        print(f"Linked: {linked_count}")
+        print(f"Not Found: {len(not_found)}")
+        self.report(
+            {'INFO'},
+            f"Imported {imported_count} props, linked {linked_count} entities."
+        )
+
+        if not_found:
+            print("")
+            print("Not found archetypes:")
+            for name in not_found:
+                print(name)
+            self.report(
+                {'WARNING'},
+                f"No matching props found. Missing: {len(not_found)}."
+            )
+
+        return {"FINISHED"}
+
+
+class GTA_SCENE_REBUILDER_OT_show_non_linked_props(bpy.types.Operator):
+    bl_idname = "gta_scene_rebuilder.show_non_linked_props"
+    bl_label = "Show Non-Linked Props"
+    bl_description = "List YTYP entities that have no linked object"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        scene = context.scene
+        non_linked = []
+
+        for ytyp in scene.ytyps:
+            for archetype in ytyp.archetypes:
+                for entity in archetype.entities:
+                    if entity.linked_object is None:
+                        non_linked.append(entity.archetype_name)
+
+        print("=== Non-Linked Props ===")
+
+        if not non_linked:
+            print("No non-linked entities found.")
+            print("")
+            print(f"Non-linked entities: 0")
+            return {"FINISHED"}
+
+        for archetype_name in non_linked:
+            print(archetype_name)
+
+        print("")
+        print(f"Non-linked entities: {len(non_linked)}")
+        self.report(
+            {'INFO'},
+            f"Found {len(non_linked)} non-linked entities. See console for details."
+        )
+
+        return {"FINISHED"}
+
+
 class GTA_SCENE_REBUILDER_OT_hide_non_ytyp_props(bpy.types.Operator):
     bl_idname = "gta_scene_rebuilder.hide_non_ytyp_props"
     bl_label = "Hide non-YTYP props"
@@ -749,6 +955,11 @@ class GTA_SCENE_REBUILDER_OT_hide_non_ytyp_props(bpy.types.Operator):
             if hierarchy_uses_collection(hierarchy_objects, PROPS_GTA_COLLECTION_NAME):
                 continue
 
+            # Only process Sollumz objects and ignore cameras, lights, non-Sollumz empties,
+            # helper objects and Blender scene tools.
+            if not hierarchy_is_sollumz(hierarchy_objects):
+                continue
+
             hidden_hierarchies_count += 1
 
             for obj in hierarchy_objects:
@@ -759,9 +970,24 @@ class GTA_SCENE_REBUILDER_OT_hide_non_ytyp_props(bpy.types.Operator):
                     if collection != hidden_props_collection:
                         collection.objects.unlink(obj)
 
-                obj.hide_viewport = True
-                obj.hide_render = True
+                # Do not modify per-object visibility. The entire Hidden props collection
+                # will be hidden in Outliner and render below.
                 moved_objects_count += 1
+
+        # Hide the Hidden props collection in the viewport/outliner and in render.
+        try:
+            hidden_props_collection.hide_viewport = False
+            hidden_props_collection.hide_render = False
+
+            layer_col = find_layer_collection(context.view_layer.layer_collection, hidden_props_collection)
+
+            if layer_col:
+                # Exclude and hide in outliner for the active view layer
+                layer_col.exclude = True
+                layer_col.hide_viewport = False
+        except Exception:
+            # If any of these fail (older/newer Blender API), ignore and continue
+            pass
 
         print(f"Hidden hierarchies: {hidden_hierarchies_count}")
         print(f"Moved objects: {moved_objects_count}")
@@ -774,6 +1000,8 @@ class GTA_SCENE_REBUILDER_OT_hide_non_ytyp_props(bpy.types.Operator):
 classes = (
     GTA_SCENE_REBUILDER_OT_rebuild_scene,
     GTA_SCENE_REBUILDER_OT_hide_non_ytyp_props,
+    GTA_SCENE_REBUILDER_OT_show_non_linked_props,
+    GTA_SCENE_REBUILDER_OT_find_missing_props,
 )
 
 
