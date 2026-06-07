@@ -6,7 +6,7 @@ class GTA_SCENE_REBUILDER_PT_viewport_panel(bpy.types.Panel):
     bl_label = "GTA Scene Rebuilder"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "GTA Scene"
+    bl_category = "GTA Tools"
 
     def draw(self, context):
         layout = self.layout
