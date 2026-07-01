@@ -939,8 +939,17 @@ class GTA_SCENE_REBUILDER_OT_hide_non_ytyp_props(bpy.types.Operator):
 
         for ytyp in scene.ytyps:
             for archetype in ytyp.archetypes:
+
+                # Keep MLO collision archetypes visible
+                if archetype.type == "sollumz_archetype_mlo":
+                    ytyp_archetype_names.add(
+                        get_blender_base_name(archetype.name)
+                    )
+
                 for entity in archetype.entities:
-                    ytyp_archetype_names.add(get_blender_base_name(entity.archetype_name))
+                    ytyp_archetype_names.add(
+                        get_blender_base_name(entity.archetype_name)
+                    )
 
         root_objects = [obj for obj in scene.objects if obj.parent is None]
 

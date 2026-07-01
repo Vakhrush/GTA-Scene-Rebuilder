@@ -161,3 +161,17 @@ Current version uses:
 
 * Matching custom props relies on file naming.
 * Asset indexes should be rebuilt after adding new assets.
+
+---
+
+## Roadmap
+
+- Adding an advanced hash search for props
+
+---
+
+## Support
+
+If GTA Scene Rebuilder has been useful for your projects and saved you time, you can support its future development.
+
+➡️ See DONATE.md
