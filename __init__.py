@@ -1,7 +1,7 @@
 bl_info = {
     "name": "GTA Scene Rebuilder",
     "author": "Bigbigdog",
-    "version": (0, 1, 0),
+    "version": (1, 0, 0),
     "blender": (5, 1, 0),
     "location": "View3D > Sidebar > GTA Tools",
     "description": "Skeleton addon for rebuilding GTA scenes.",
