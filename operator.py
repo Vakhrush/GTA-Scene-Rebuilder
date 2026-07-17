@@ -20,6 +20,26 @@ def get_blender_base_name(object_name):
     return object_name
 
 
+def get_joaat_hash(value):
+    """Return GTA's JOAAT hash as an uppercase 32-bit hex string."""
+    hash_value = 0
+
+    for character in value.lower():
+        hash_value = (hash_value + ord(character)) & 0xFFFFFFFF
+        hash_value = (hash_value + ((hash_value << 10) & 0xFFFFFFFF)) & 0xFFFFFFFF
+        hash_value ^= (hash_value >> 6)
+
+    hash_value = (hash_value + ((hash_value << 3) & 0xFFFFFFFF)) & 0xFFFFFFFF
+    hash_value ^= (hash_value >> 11)
+    hash_value = (hash_value + ((hash_value << 15) & 0xFFFFFFFF)) & 0xFFFFFFFF
+
+    return f"{hash_value & 0xFFFFFFFF:08X}"
+
+
+def get_hashed_asset_name(asset_name):
+    return f"hash_{get_joaat_hash(asset_name)}"
+
+
 def get_addon_preferences(context):
     addon_names = (
         __package__,
@@ -817,9 +837,13 @@ class GTA_SCENE_REBUILDER_OT_find_missing_props(bpy.types.Operator):
                     continue
 
                 base = p.name.split(".")[0].lower()
+                hashed_base = get_hashed_asset_name(base).lower()
 
                 if base not in file_lookup:
                     file_lookup[base] = p
+
+                if hashed_base not in file_lookup:
+                    file_lookup[hashed_base] = p
         except Exception as e:
             print(f"Error scanning directory: {selected_dir}")
             print(e)
@@ -835,7 +859,11 @@ class GTA_SCENE_REBUILDER_OT_find_missing_props(bpy.types.Operator):
         imported_roots = {}
 
         for archetype_name, entities in entities_by_archetype.items():
-            match_path = file_lookup.get(archetype_name.lower())
+            lookup_name = archetype_name.lower()
+            match_path = file_lookup.get(lookup_name)
+
+            if not match_path:
+                match_path = file_lookup.get(get_hashed_asset_name(lookup_name).lower())
 
             if not match_path:
                 not_found.append(archetype_name)
