@@ -21,6 +21,11 @@ class GTA_SCENE_REBUILDER_PT_viewport_panel(bpy.types.Panel):
             icon="HIDE_ON",
         )
         layout.operator(
+            "gta_scene_rebuilder.hide_non_entities_props",
+            text="Hide non-entities props",
+            icon="HIDE_ON",
+        )
+        layout.operator(
             "gta_scene_rebuilder.show_non_linked_props",
             text="Show Non-Linked Props",
             icon="INFO",

@@ -972,11 +972,6 @@ class GTA_SCENE_REBUILDER_OT_hide_non_ytyp_props(bpy.types.Operator):
                     get_blender_base_name(archetype.name)
                 )
 
-                for entity in archetype.entities:
-                    ytyp_archetype_names.add(
-                        get_blender_base_name(entity.archetype_name)
-                    )
-
         root_objects = [obj for obj in scene.objects if obj.parent is None]
 
         for root_object in root_objects:
@@ -1032,9 +1027,84 @@ class GTA_SCENE_REBUILDER_OT_hide_non_ytyp_props(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class GTA_SCENE_REBUILDER_OT_hide_non_entities_props(bpy.types.Operator):
+    bl_idname = "gta_scene_rebuilder.hide_non_entities_props"
+    bl_label = "Hide non-entities props"
+    bl_description = "Move and hide root object hierarchies not referenced by MLO entities"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        scene = context.scene
+        ytyp_archetype_names = set()
+        hidden_hierarchies_count = 0
+        moved_objects_count = 0
+        hidden_props_collection = ensure_hidden_props_collection(context)
+
+        for ytyp in scene.ytyps:
+            for archetype in ytyp.archetypes:
+                # Keep MLO collision archetypes visible
+                if archetype.type == "sollumz_archetype_mlo":
+                    ytyp_archetype_names.add(
+                        get_blender_base_name(archetype.name)
+                    )
+
+                    for entity in archetype.entities:
+                        ytyp_archetype_names.add(
+                            get_blender_base_name(entity.archetype_name)
+                        )
+
+        root_objects = [obj for obj in scene.objects if obj.parent is None]
+
+        for root_object in root_objects:
+            normalized_root_name = get_blender_base_name(root_object.name)
+
+            if normalized_root_name in ytyp_archetype_names:
+                continue
+
+            hierarchy_objects = get_object_hierarchy(root_object)
+
+            if hierarchy_uses_collection(hierarchy_objects, PROPS_GTA_COLLECTION_NAME):
+                continue
+
+            if not hierarchy_is_sollumz(hierarchy_objects):
+                continue
+
+            hidden_hierarchies_count += 1
+
+            for obj in hierarchy_objects:
+                if obj.name not in hidden_props_collection.objects.keys():
+                    hidden_props_collection.objects.link(obj)
+
+                for collection in list(obj.users_collection):
+                    if collection != hidden_props_collection:
+                        collection.objects.unlink(obj)
+
+                moved_objects_count += 1
+
+        try:
+            hidden_props_collection.hide_viewport = False
+            hidden_props_collection.hide_render = False
+
+            layer_col = find_layer_collection(context.view_layer.layer_collection, hidden_props_collection)
+
+            if layer_col:
+                layer_col.exclude = True
+                layer_col.hide_viewport = False
+        except Exception:
+            pass
+
+        print(f"Hidden hierarchies: {hidden_hierarchies_count}")
+        print(f"Moved objects: {moved_objects_count}")
+        print(f"Hidden props collection objects: {len(hidden_props_collection.objects)}")
+
+        self.report({"INFO"}, f"Hidden {hidden_hierarchies_count} non-entities hierarchies.")
+        return {"FINISHED"}
+
+
 classes = (
     GTA_SCENE_REBUILDER_OT_rebuild_scene,
     GTA_SCENE_REBUILDER_OT_hide_non_ytyp_props,
+    GTA_SCENE_REBUILDER_OT_hide_non_entities_props,
     GTA_SCENE_REBUILDER_OT_show_non_linked_props,
     GTA_SCENE_REBUILDER_OT_find_missing_props,
 )
