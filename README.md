@@ -1,33 +1,59 @@
 # GTA Scene Rebuilder
 
-Blender addon for restoring GTA V scenes from YTYP entity data.
+Blender addon for searching for and correctly placing GTA V props according to YTYP entity data.
+
+The addon restores prop names when they are hashed and the original names are available.
 
 Designed for workflows using Sollumz.
 
 ## Features
 
-### Analyze Scene
+### Rebuild Scene
 
-Scans imported YTYP data and detects:
+Rebuilds entity placement using existing props in the scene.
 
-* Missing entity references
-* Missing GTA props
-* Missing custom props
-* Duplicate entity setups
+* Resolves hashed prop and archetype names using JOAAT hashes
+* Restores original names when matching source names are available
+* Searches for existing props in the scene
+* Automatically links props to YTYP entities
+* Reuses existing props when possible
+* Creates duplicates when multiple entities use the same archetype
+* Applies entity transforms
+* Restores YTYP archetype asset references
+* Does not import missing props
+
+The project folder used for the original Sollumz import is required for resolving hashed names.
+
+### Rebuild Props
+
+Searches for missing props in the configured GTA Asset Library and Custom Props Library.
+
+* Restores hashed prop names when original names are available
+* Uses indexed asset lookup
+* Supports JOAAT hash lookup
+* Restores missing GTA V props from Asset Library (.blend files)
+* Batch imports assets for improved performance
+* Searches for custom props
+* Imports custom props through Sollumz
+* Automatically links props to YTYP entities
+* Creates duplicates when multiple entities use the same archetype
+* Applies entity transforms
 
 ### GTA Asset Restoration
 
-* Restores missing GTA V props from Asset Library (.blend files)
-* Uses indexed asset lookup
-* Batch imports assets for improved performance
-* Creates duplicates when multiple entities use the same archetype
-* Automatically links imported objects to YTYP entities
-* Applies entity transforms
+* GTA V Asset Library support
+* Indexed asset lookup
+* Original filename lookup
+* JOAAT hash lookup
+* Batch asset importing
+* Automatic entity linking
+* Automatic duplication support
 
 ### Custom Props Support
 
 * Recursive folder indexing
 * Custom prop database
+* JOAAT hash lookup
 * Import through Sollumz
 * Hierarchy reconstruction
 * Automatic entity linking
@@ -89,6 +115,8 @@ Then click:
 
 - Check and Build Asset Index
 
+The index stores both original asset names and JOAAT hashes for hash-based lookup.
+
 ### Custom Props
 
 Set:
@@ -99,27 +127,54 @@ Then click:
 
 - Check and Build Custom Props Index
 
+The index stores both original prop names and JOAAT hashes for hash-based lookup.
+
 ## Usage
 
-### Restore Scene
+### Rebuild Scene
 
-1. Import project assets.
+Use this tool when the YTYP entity data has already been imported through Sollumz and the required props already exist in the scene.
+
+1. Import project assets through Sollumz.
 2. Import YTYP using Sollumz.
 3. Open:
 
--View3D → Sidebar → GTA Scene Rebuilder
+- View3D → Sidebar → GTA Scene Rebuilder
 
-4. Click:
+4. Specify the project folder from which the Sollumz import was performed.
+5. Click:
 
-- Analyze Scene
+- Rebuild Scene
 
 The addon will:
 
-* restore missing GTA props
-* restore custom props
-* rebuild entity links
+* resolve hashed YTYP names
+* restore original prop names when available
+* find matching props already present in the scene
+* link props to YTYP entities
+* reuse existing props when possible
 * create duplicates when required
-* apply transforms automatically
+* apply entity transforms
+
+### Rebuild Props
+
+Use this tool when props referenced by YTYP entities are missing from the scene.
+
+Click:
+
+- Rebuild props
+
+The addon will:
+
+* search the configured GTA Asset Library and Custom Props Library
+* resolve hashed prop names
+* restore original names when available
+* import missing props
+* link props to YTYP entities
+* create duplicates when required
+* apply entity transforms
+
+This operation may take some time depending on the size of the asset libraries.
 
 ### Hide Unused Props
 
@@ -127,11 +182,11 @@ Click:
 
 - Hide Non-YTYP Props
 
-Objects not referenced by YTYP entities will be moved to "Hidden props" collection.
+Objects not referenced by YTYP entities will be moved to the "Hidden props" collection.
 
 ### Find Missing Props Here...
 
-Use this tool when some entities remain unlinked after running Analyze Scene.
+Use this tool when some entities remain unlinked after running Rebuild props.
 
 Click:
 
@@ -149,24 +204,41 @@ The addon will:
 
 Imported objects will be placed into the "Missing props" collection.
 
+## Hash Resolution
+
+GTA Scene Rebuilder supports resolving hashed prop and archetype names using JOAAT hashes.
+
+For example:
+
+`hash_7305e0f3`
+
+can be resolved to its original prop name when the corresponding original name is present in the configured asset library or project source files.
+
+Hash matching is case-insensitive and supports normalized 32-bit JOAAT values.
+
+If an original name cannot be found, the hashed name is preserved.
+
 ## Performance
 
 Current version uses:
 
 * Asset indexing
 * Custom props indexing
+* JOAAT hash indexing
 * Batch blend importing
+* Existing object reuse
+* Hierarchy duplication only when required
 
 ## Current Limitations
 
 * Matching custom props relies on file naming.
+* Hashed names can only be restored when the corresponding original name is available.
+* Rebuild Scene requires the project folder used for the original Sollumz import to resolve source filenames.
 * Asset indexes should be rebuilt after adding new assets.
 
 ---
 
 ## Roadmap
-
-- Adding an advanced hash search for props
 
 ---
 
