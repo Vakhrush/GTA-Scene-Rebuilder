@@ -439,6 +439,26 @@ class GTA_SCENE_REBUILDER_OT_rebuild_props(bpy.types.Operator):
     def execute(self, context):
         total_execution_start_time = time.perf_counter()
         scene = context.scene
+
+        preferences = get_addon_preferences(context)
+        index_file_path = preferences.index_file_path if preferences else ""
+        asset_library_path = preferences.asset_library_path if preferences else ""
+        _, hash_index, _, _, _ = load_asset_index(index_file_path, asset_library_path)
+
+        for ytyp in scene.ytyps:
+            for archetype in ytyp.archetypes:
+                for entity in archetype.entities:
+                    archetype_name = entity.archetype_name
+                    if not archetype_name.lower().startswith("hash_"):
+                        continue
+
+                    hash_value = normalize_hash_value(archetype_name[5:])
+                    asset_record = hash_index.get(hash_value) if hash_value else None
+                    if asset_record:
+                        resolved_name = get_blender_base_name(asset_record["object"])
+                        print(f"HASH RESOLVED: {archetype_name} -> {resolved_name}")
+                        entity.archetype_name = resolved_name
+
         total_ytyp_count = 0
         total_archetype_count = 0
         total_entity_count = 0
@@ -908,6 +928,30 @@ class GTA_SCENE_REBUILDER_OT_rebuild_scene(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class GTA_SCENE_REBUILDER_OT_rebuild_scene_help(bpy.types.Operator):
+    bl_idname = "gta_scene_rebuilder.rebuild_scene_help"
+    bl_label = "Rebuild Scene Help"
+
+    def execute(self, context):
+        show_warning_popup(
+            context,
+            "Specify the project folder from which the import was performed through Sollumz to resolve prop names from hashes and correctly and automatically place entities.",
+        )
+        return {"FINISHED"}
+
+
+class GTA_SCENE_REBUILDER_OT_rebuild_props_help(bpy.types.Operator):
+    bl_idname = "gta_scene_rebuilder.rebuild_props_help"
+    bl_label = "Rebuild Props Help"
+
+    def execute(self, context):
+        show_warning_popup(
+            context,
+            "Searches for props in your libraries specified in the settings, restores the original name if it is hashed, links them to entities and places them correctly. This may take some time.",
+        )
+        return {"FINISHED"}
+
+
 class GTA_SCENE_REBUILDER_OT_find_missing_props(bpy.types.Operator):
     bl_idname = "gta_scene_rebuilder.find_missing_props"
     bl_label = "Find Missing Props Here..."
@@ -1226,6 +1270,8 @@ class GTA_SCENE_REBUILDER_OT_hide_non_entities_props(bpy.types.Operator):
 classes = (
     GTA_SCENE_REBUILDER_OT_rebuild_scene,
     GTA_SCENE_REBUILDER_OT_rebuild_props,
+    GTA_SCENE_REBUILDER_OT_rebuild_scene_help,
+    GTA_SCENE_REBUILDER_OT_rebuild_props_help,
     GTA_SCENE_REBUILDER_OT_hide_non_ytyp_props,
     GTA_SCENE_REBUILDER_OT_hide_non_entities_props,
     GTA_SCENE_REBUILDER_OT_show_non_linked_props,

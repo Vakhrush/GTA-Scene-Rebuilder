@@ -1,10 +1,10 @@
 bl_info = {
     "name": "GTA Scene Rebuilder",
     "author": "Bigbigdog",
-    "version": (1, 2, 1),
+    "version": (1, 3, 0),
     "blender": (5, 1, 0),
     "location": "View3D > Sidebar > GTA Tools",
-    "description": "Skeleton addon for rebuilding GTA scenes.",
+    "description": "Searches for and correctly places props according to the YTYP file, restores prop names if they are hashed and the original names are available.",
     "doc_url": "https://github.com/Vakhrush/GTA-Scene-Rebuilder",
     "category": "3D View",
 }
