@@ -12,7 +12,12 @@ class GTA_SCENE_REBUILDER_PT_viewport_panel(bpy.types.Panel):
         layout = self.layout
         layout.operator(
             "gta_scene_rebuilder.rebuild_scene",
-            text="Analyze Scene",
+            text="Rebuild scene",
+            icon="OUTLINER_OB_GROUP_INSTANCE",
+        )
+        layout.operator(
+            "gta_scene_rebuilder.rebuild_props",
+            text="Rebuild props",
             icon="OUTLINER_OB_GROUP_INSTANCE",
         )
         layout.operator(

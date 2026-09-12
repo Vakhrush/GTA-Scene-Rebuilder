@@ -38,10 +38,25 @@ def get_custom_prop_archetype_name(file_path):
     return None
 
 
+def get_joaat_hash(value):
+    hash_value = 0
+
+    for character in value.lower():
+        hash_value = (hash_value + ord(character)) & 0xFFFFFFFF
+        hash_value = (hash_value + ((hash_value << 10) & 0xFFFFFFFF)) & 0xFFFFFFFF
+        hash_value ^= hash_value >> 6
+
+    hash_value = (hash_value + ((hash_value << 3) & 0xFFFFFFFF)) & 0xFFFFFFFF
+    hash_value ^= hash_value >> 11
+    hash_value = (hash_value + ((hash_value << 15) & 0xFFFFFFFF)) & 0xFFFFFFFF
+    return f"{hash_value & 0xFFFFFFFF:08x}"
+
+
 def build_asset_index(asset_library_path, index_file_path):
     library_path = Path(bpy.path.abspath(asset_library_path))
     index_path = Path(bpy.path.abspath(index_file_path))
     asset_index = {}
+    hash_index = {}
     indexed_asset_names = set()
 
     for blend_file_path in library_path.rglob("*.blend"):
@@ -58,6 +73,7 @@ def build_asset_index(asset_library_path, index_file_path):
                         "object": object_name,
                     }
                     indexed_asset_names.add(asset_name)
+                    hash_index.setdefault(get_joaat_hash(asset_name), asset_index[asset_name])
         except Exception as error:
             print(f"ASSET INDEX ERROR: {blend_file_path}")
             print(error)
@@ -70,6 +86,7 @@ def build_asset_index(asset_library_path, index_file_path):
             "build_time": build_time,
             "asset_count": len(asset_index),
         },
+        "_hash_index": hash_index,
         **asset_index,
     }
 

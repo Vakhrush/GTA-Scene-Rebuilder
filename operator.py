@@ -40,6 +40,13 @@ def get_hashed_asset_name(asset_name):
     return f"hash_{get_joaat_hash(asset_name)}"
 
 
+def normalize_hash_value(value):
+    try:
+        return f"{int(value, 16) & 0xFFFFFFFF:08x}"
+    except ValueError:
+        return None
+
+
 def get_addon_preferences(context):
     addon_names = (
         __package__,
@@ -203,7 +210,7 @@ def load_asset_index(index_file_path, asset_library_path):
     index_path = Path(bpy.path.abspath(index_file_path))
 
     if not index_path.is_file():
-        return {}, index_path, None, None
+        return {}, {}, index_path, None, None
 
     try:
         with index_path.open("r", encoding="utf-8") as index_file:
@@ -211,14 +218,14 @@ def load_asset_index(index_file_path, asset_library_path):
     except Exception as error:
         print(f"ASSET INDEX LOAD ERROR: {index_path}")
         print(error)
-        return {}, index_path, None, None
+        return {}, {}, index_path, None, None
 
     metadata = index_data.get("_metadata")
 
     if not metadata:
         warning = "Asset index metadata is missing. Please rebuild index."
         print(warning)
-        return {}, index_path, None, warning
+        return {}, {}, index_path, None, warning
 
     current_asset_library_path = str(Path(bpy.path.abspath(asset_library_path)))
     indexed_asset_library_path = metadata.get("asset_library_path")
@@ -226,15 +233,16 @@ def load_asset_index(index_file_path, asset_library_path):
     if current_asset_library_path != indexed_asset_library_path:
         warning = "Asset Library path changed. Please rebuild index."
         print(warning)
-        return {}, index_path, metadata.get("build_time"), warning
+        return {}, {}, index_path, metadata.get("build_time"), warning
 
     asset_index = {
         asset_name: asset_record
         for asset_name, asset_record in index_data.items()
-        if asset_name != "_metadata"
+        if asset_name not in {"_metadata", "_hash_index"}
     }
+    hash_index = index_data.get("_hash_index", {})
 
-    return asset_index, index_path, metadata.get("build_time"), None
+    return asset_index, hash_index, index_path, metadata.get("build_time"), None
 
 
 def load_custom_props_index(index_file_path, custom_props_path):
@@ -422,9 +430,9 @@ def import_custom_prop(custom_prop_file_path, archetype_name, custom_props_colle
     return root_object
 
 
-class GTA_SCENE_REBUILDER_OT_rebuild_scene(bpy.types.Operator):
-    bl_idname = "gta_scene_rebuilder.rebuild_scene"
-    bl_label = "Analyze Scene"
+class GTA_SCENE_REBUILDER_OT_rebuild_props(bpy.types.Operator):
+    bl_idname = "gta_scene_rebuilder.rebuild_props"
+    bl_label = "Rebuild props"
     bl_description = "Analyze loaded YTYP entities"
     bl_options = {"REGISTER"}
 
@@ -546,7 +554,7 @@ class GTA_SCENE_REBUILDER_OT_rebuild_scene(bpy.types.Operator):
         custom_props_index_file_path = preferences.custom_props_index_file_path if preferences else ""
         custom_props_path = preferences.custom_props_path if preferences else ""
         index_load_start_time = time.perf_counter()
-        asset_index, index_path, last_build_time, index_warning = load_asset_index(index_file_path, asset_library_path)
+        asset_index, hash_index, index_path, last_build_time, index_warning = load_asset_index(index_file_path, asset_library_path)
         custom_props_index, custom_props_index_path, custom_props_last_build_time, custom_props_index_warning = load_custom_props_index(
             custom_props_index_file_path,
             custom_props_path,
@@ -595,6 +603,9 @@ class GTA_SCENE_REBUILDER_OT_rebuild_scene(bpy.types.Operator):
 
             asset_lookup_start_time = time.perf_counter()
             asset_record = asset_index.get(archetype_name)
+            if not asset_record and archetype_name.lower().startswith("hash_"):
+                hash_value = normalize_hash_value(archetype_name[5:])
+                asset_record = hash_index.get(hash_value) if hash_value else None
             asset_lookup_time += time.perf_counter() - asset_lookup_start_time
 
             if not asset_record:
@@ -789,6 +800,111 @@ class GTA_SCENE_REBUILDER_OT_rebuild_scene(bpy.types.Operator):
         print(f"{'Total execution time':<30} {total_execution_time:.6f}s")
 
         self.report({"INFO"}, "GTA Scene Rebuilder analysis complete. See console output.")
+        return {"FINISHED"}
+
+
+class GTA_SCENE_REBUILDER_OT_rebuild_scene(bpy.types.Operator):
+    bl_idname = "gta_scene_rebuilder.rebuild_scene"
+    bl_label = "Rebuild scene"
+    bl_description = "Resolve imported GTA names and rebuild the scene"
+    bl_options = {"REGISTER", "UNDO"}
+
+    directory: bpy.props.StringProperty(subtype="DIR_PATH")
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {"RUNNING_MODAL"}
+
+    def execute(self, context):
+        source_dir = Path(bpy.path.abspath(self.directory))
+
+        if not source_dir.is_dir():
+            message = "Imported source folder could not be determined. Select the folder used for the GTA import."
+            print(f"ERROR: {message}")
+            self.report({"ERROR"}, message)
+            return {"CANCELLED"}
+
+        hash_to_name = {}
+        for source_file in source_dir.rglob("*"):
+            if source_file.is_file():
+                original_name = source_file.stem
+                hash_to_name.setdefault(get_joaat_hash(original_name).lower(), original_name)
+
+        for ytyp in context.scene.ytyps:
+            for archetype in ytyp.archetypes:
+                if archetype.name.lower().startswith("hash_"):
+                    original_name = archetype.name
+                    hash_value = normalize_hash_value(original_name[5:])
+                    resolved_name = hash_to_name.get(hash_value) if hash_value else None
+
+                    if resolved_name:
+                        archetype.name = resolved_name
+                        print(f"HASH RESOLVED: {original_name} -> {resolved_name}")
+                    else:
+                        print(f"HASH NOT RESOLVED: {original_name}")
+
+        for ytyp in context.scene.ytyps:
+            for archetype in ytyp.archetypes:
+                for entity in archetype.entities:
+                    archetype_name = entity.archetype_name
+                    if not archetype_name.lower().startswith("hash_"):
+                        continue
+
+                    hash_value = normalize_hash_value(archetype_name[5:])
+                    resolved_name = hash_to_name.get(hash_value) if hash_value else None
+                    if resolved_name:
+                        entity.archetype_name = resolved_name
+                        print(f"HASH RESOLVED: {archetype_name} -> {resolved_name}")
+                    else:
+                        print(f"HASH NOT RESOLVED: {archetype_name}")
+
+        root_objects_by_base_name = {}
+        for obj in context.scene.objects:
+            if obj.parent is None:
+                base_name = get_blender_base_name(obj.name)
+                root_objects_by_base_name.setdefault(base_name, []).append(obj)
+
+        props_collection = ensure_props_gta_collection(context)
+
+        for ytyp in context.scene.ytyps:
+            for archetype in ytyp.archetypes:
+                matched_archetype_objects = root_objects_by_base_name.get(archetype.name, [])
+                if matched_archetype_objects and hasattr(archetype, "asset"):
+                    try:
+                        archetype.asset = matched_archetype_objects[0]
+                        print(f"ARCHETYPE ASSET FOUND: {archetype.name} -> {matched_archetype_objects[0].name}")
+                    except (AttributeError, TypeError):
+                        pass
+
+        objects_by_archetype_name = {
+            archetype_name: list(objects)
+            for archetype_name, objects in root_objects_by_base_name.items()
+        }
+        for ytyp in context.scene.ytyps:
+            for archetype in ytyp.archetypes:
+                for entity in archetype.entities:
+                    archetype_name = entity.archetype_name
+                    if entity.linked_object is not None:
+                        continue
+
+                    available_objects = objects_by_archetype_name.get(archetype_name, [])
+                    if available_objects:
+                        entity_object = available_objects.pop(0)
+                        link_object_to_props_collection(entity_object, props_collection)
+                        print(f"ENTITY LINK: {archetype_name} -> {entity_object.name}")
+                    else:
+                        source_objects = root_objects_by_base_name.get(archetype_name, [])
+                        if not source_objects:
+                            print(f"OBJECT NOT FOUND: {archetype_name}")
+                            continue
+                        entity_object = duplicate_hierarchy(source_objects[0], props_collection)
+                        print(f"ENTITY DUPLICATE: {archetype_name} -> {entity_object.name}")
+
+                    entity.linked_object = entity_object
+                    entity_object.location = entity.position
+                    entity_object.rotation_euler = entity.rotation.to_euler()
+
+        self.report({"INFO"}, "Scene rebuilt using existing objects. Missing props were not imported.")
         return {"FINISHED"}
 
 
@@ -1109,6 +1225,7 @@ class GTA_SCENE_REBUILDER_OT_hide_non_entities_props(bpy.types.Operator):
 
 classes = (
     GTA_SCENE_REBUILDER_OT_rebuild_scene,
+    GTA_SCENE_REBUILDER_OT_rebuild_props,
     GTA_SCENE_REBUILDER_OT_hide_non_ytyp_props,
     GTA_SCENE_REBUILDER_OT_hide_non_entities_props,
     GTA_SCENE_REBUILDER_OT_show_non_linked_props,
