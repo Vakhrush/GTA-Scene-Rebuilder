@@ -6,6 +6,8 @@ The addon restores prop names when they are hashed and the original names are av
 
 Designed for workflows using Sollumz.
 
+[Watch the tutorial on YouTube](https://youtu.be/mIBBfeaEZWw)
+
 ## Features
 
 ### Rebuild Scene
